@@ -1,0 +1,153 @@
+name: YouTube Live Stream Monitor
+
+on:
+  workflow_dispatch: # Now only triggered by cron-job.org or manual clicks
+
+jobs:
+  check-streams:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check YouTube Live Streams & Notify Telegram
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          node - <<'EOF'
+          const https = require("https");
+          const fs = require("fs");
+
+          // ─── Config ───────────────────────────────────────────────────────────────
+          const YOUTUBE_API_KEY   = process.env.YOUTUBE_API_KEY;
+          const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+          const TELEGRAM_CHAT_ID  = process.env.TELEGRAM_CHAT_ID;
+
+          // Updated Playlist IDs (UC changed to UU for Uploads)
+          const PLAYLIST_IDS = [
+            "UU8brOTuK0kcZNjiFpZOqw-g", // @gentleplaysss
+            "UUONfoWIZMz6ZQtyibRUrD8g", // @09thYT
+            "UUfpIgTOfyQVkYrmXfwIyriQ", // @Lapa41
+            "UU5dmo7JjU-Mqdg6hELICh8g", // @ArmoredReality
+            "UUrk-QGWp7eMNJSGQ5h6BORA", // @VampedRBLX
+            "UUI7dq0xYSboALge88iamUhg", // @HeySkyfall
+            "UUcKHvuE2OmgZnb2XlqKcHgw", // @CrossroadOnRblx
+            "UUA8Us_qSFhhqrk7SOZQSV-Q", // @BlueyRBLXYT
+          ];
+
+          const NOTIFIED_FILE = "notified.json";
+
+          // ─── Helpers ──────────────────────────────────────────────────────────────
+          function get(url) {
+            return new Promise((resolve, reject) => {
+              https.get(url, (res) => {
+                let data = "";
+                res.on("data", (c) => (data += c));
+                res.on("end", () => {
+                  try { resolve(JSON.parse(data)); }
+                  catch (e) { reject(e); }
+                });
+              }).on("error", reject);
+            });
+          }
+
+          function post(url, body) {
+            return new Promise((resolve, reject) => {
+              const payload = JSON.stringify(body);
+              const options = {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Content-Length": Buffer.byteLength(payload),
+                },
+              };
+              const req = https.request(url, options, (res) => {
+                let data = "";
+                res.on("data", (c) => (data += c));
+                res.on("end", () => resolve(data));
+              });
+              req.on("error", reject);
+              req.write(payload);
+              req.end();
+            });
+          }
+
+          // ─── Main ─────────────────────────────────────────────────────────────────
+          (async () => {
+            let notified = {};
+            if (fs.existsSync(NOTIFIED_FILE)) {
+              try { notified = JSON.parse(fs.readFileSync(NOTIFIED_FILE, "utf8")); }
+              catch (_) { notified = {}; }
+            }
+
+            let newNotifications = 0;
+
+            for (const playlistId of PLAYLIST_IDS) {
+              try {
+                const playlistUrl =
+                  `https://www.googleapis.com/youtube/v3/playlistItems` +
+                  `?part=snippet&playlistId=${playlistId}&maxResults=1&key=${YOUTUBE_API_KEY}`;
+                const playlistRes = await get(playlistUrl);
+
+                if (!playlistRes.items?.length) continue;
+
+                const videoId = playlistRes.items[0].snippet.resourceId.videoId;
+
+                if (notified[videoId]) {
+                  console.log(`⏭️ Already notified: ${videoId}`);
+                  continue;
+                }
+
+                const videoUrl =
+                  `https://www.googleapis.com/youtube/v3/videos` +
+                  `?part=snippet,liveStreamingDetails&id=${videoId}&key=${YOUTUBE_API_KEY}`;
+                const videoRes = await get(videoUrl);
+
+                const video = videoRes.items?.[0];
+                if (!video) continue;
+
+                const isLive = video.snippet.liveBroadcastContent === "live";
+
+                if (isLive) {
+                  const title   = video.snippet.title;
+                  const channel = video.snippet.channelTitle;
+                  const url     = `https://youtube.com/watch?v=${videoId}`;
+                  const message = `🔴 *${channel} is LIVE!*\n\n*${title}*\n\n${url}`;
+
+                  await post(
+                    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+                    { chat_id: TELEGRAM_CHAT_ID, text: message, parse_mode: "Markdown" }
+                  );
+
+                  notified[videoId] = true;
+                  newNotifications++;
+                  console.log(`✅ Notified: ${channel} - ${title}`);
+                } else {
+                  console.log(`⏭️ Not live: ${videoId}`);
+                }
+
+              } catch (err) {
+                console.error(`❌ Error for playlist ${playlistId}:`, err.message);
+              }
+            }
+
+            fs.writeFileSync(NOTIFIED_FILE, JSON.stringify(notified, null, 2));
+            console.log(`\n✔ Checked ${PLAYLIST_IDS.length} playlists | New notifications: ${newNotifications}`);
+          })();
+          EOF
+
+      - name: Commit notified state
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add notified.json
+          git diff --cached --quiet || git commit -m "chore: update notified stream state [skip ci]"
+          git push
