@@ -1,8 +1,8 @@
 name: YouTube Live Stream Monitor
 
 on:
-  workflow_dispatch: # Now only triggered by cron-job.org or manual clicks
-
+  workflow_dispatch:
+  
 jobs:
   check-streams:
     runs-on: ubuntu-latest
@@ -26,12 +26,10 @@ jobs:
           const https = require("https");
           const fs = require("fs");
 
-          // ─── Config ───────────────────────────────────────────────────────────────
-          const YOUTUBE_API_KEY   = process.env.YOUTUBE_API_KEY;
+          const YOUTUBE_API_KEY    = process.env.YOUTUBE_API_KEY;
           const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-          const TELEGRAM_CHAT_ID  = process.env.TELEGRAM_CHAT_ID;
+          const TELEGRAM_CHAT_ID   = process.env.TELEGRAM_CHAT_ID;
 
-          // Updated Playlist IDs (UC changed to UU for Uploads)
           const PLAYLIST_IDS = [
             "UU8brOTuK0kcZNjiFpZOqw-g", // @gentleplaysss
             "UUONfoWIZMz6ZQtyibRUrD8g", // @09thYT
@@ -45,7 +43,6 @@ jobs:
 
           const NOTIFIED_FILE = "notified.json";
 
-          // ─── Helpers ──────────────────────────────────────────────────────────────
           function get(url) {
             return new Promise((resolve, reject) => {
               https.get(url, (res) => {
@@ -80,7 +77,6 @@ jobs:
             });
           }
 
-          // ─── Main ─────────────────────────────────────────────────────────────────
           (async () => {
             let notified = {};
             if (fs.existsSync(NOTIFIED_FILE)) {
@@ -102,7 +98,7 @@ jobs:
                 const videoId = playlistRes.items[0].snippet.resourceId.videoId;
 
                 if (notified[videoId]) {
-                  console.log(`⏭️ Already notified: ${videoId}`);
+                  console.log(`⏭️  Already notified: ${videoId}`);
                   continue;
                 }
 
@@ -116,22 +112,35 @@ jobs:
 
                 const isLive = video.snippet.liveBroadcastContent === "live";
 
+                console.log(`🔍 Video ID: ${videoId} | liveBroadcastContent: ${video.snippet.liveBroadcastContent} | Title: ${video.snippet.title}`);
+
                 if (isLive) {
                   const title   = video.snippet.title;
                   const channel = video.snippet.channelTitle;
                   const url     = `https://youtube.com/watch?v=${videoId}`;
-                  const message = `🔴 *${channel} is LIVE!*\n\n*${title}*\n\n${url}`;
+                  const esc     = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                  const message = `🔴 <b>${esc(channel)} is LIVE!</b>\n\n<b>${esc(title)}</b>\n\n${url}`;
 
-                  await post(
+                  console.log(`📤 Sending Telegram message for: ${channel} - ${title}`);
+
+                  const telegramResult = await post(
                     `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-                    { chat_id: TELEGRAM_CHAT_ID, text: message, parse_mode: "Markdown" }
+                    { chat_id: TELEGRAM_CHAT_ID, text: message, parse_mode: "HTML" }
                   );
 
-                  notified[videoId] = true;
-                  newNotifications++;
-                  console.log(`✅ Notified: ${channel} - ${title}`);
+                  console.log(`📬 Telegram response: ${telegramResult}`);
+
+                  const parsed = JSON.parse(telegramResult);
+                  if (parsed.ok) {
+                    notified[videoId] = true;
+                    newNotifications++;
+                    console.log(`✅ Notified: ${channel} - ${title}`);
+                  } else {
+                    console.error(`❌ Telegram rejected message: ${parsed.description}`);
+                  }
+
                 } else {
-                  console.log(`⏭️ Not live: ${videoId}`);
+                  console.log(`⏭️  Not live: ${videoId}`);
                 }
 
               } catch (err) {
