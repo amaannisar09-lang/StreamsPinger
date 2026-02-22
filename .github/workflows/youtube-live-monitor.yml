@@ -16,11 +16,12 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Check YouTube Live Streams & Notify Telegram
+      - name: Check YouTube Live Streams & Notify Telegram + Discord
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           node - <<'EOF'
           const https = require("https");
@@ -29,16 +30,19 @@ jobs:
           const YOUTUBE_API_KEY    = process.env.YOUTUBE_API_KEY;
           const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
           const TELEGRAM_CHAT_ID   = process.env.TELEGRAM_CHAT_ID;
+          const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
           const PLAYLIST_IDS = [
-            "UU8brOTuK0kcZNjiFpZOqw-g", // @gentleplaysss
-            "UUONfoWIZMz6ZQtyibRUrD8g", // @09thYT
-            "UUfpIgTOfyQVkYrmXfwIyriQ", // @Lapa41
-            "UU5dmo7JjU-Mqdg6hELICh8g", // @ArmoredReality
-            "UUrk-QGWp7eMNJSGQ5h6BORA", // @VampedRBLX
-            "UUI7dq0xYSboALge88iamUhg", // @HeySkyfall
-            "UUcKHvuE2OmgZnb2XlqKcHgw", // @CrossroadOnRblx
-            "UUA8Us_qSFhhqrk7SOZQSV-Q", // @BlueyRBLXYT
+            "UUBCb6Ye01QIcOQqn4jXl2cQ",
+            "UUqzW7F0gwfgPrzabIi5RCmw",
+            "UU1q8Mowrhbbx3WjuX16p8JA",
+            "UUybLkSR7bhDO1euayyonllA",
+            "UU2TXK9laU5OWK_23zizgVMg",
+            "UUIuJ3tEY0U5CRtk5GAt0Z2Q",
+            "UU21eaBpzcQdaCQVKjSjKQIw",
+            "UUuntlPezO6Ge_9C28TcK1Qg",
+            "UUdfhZEs7QeJZ0_rqZVq207g",
+            "UUliiFfkk1u60BGrt0bJ4vVA",
           ];
 
           const NOTIFIED_FILE = "notified.json";
@@ -59,22 +63,72 @@ jobs:
           function post(url, body) {
             return new Promise((resolve, reject) => {
               const payload = JSON.stringify(body);
+              const urlObj = new URL(url);
               const options = {
+                hostname: urlObj.hostname,
+                path: urlObj.pathname + urlObj.search,
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
                   "Content-Length": Buffer.byteLength(payload),
                 },
               };
-              const req = https.request(url, options, (res) => {
+              const req = https.request(options, (res) => {
                 let data = "";
                 res.on("data", (c) => (data += c));
-                res.on("end", () => resolve(data));
+                res.on("end", () => resolve({ status: res.statusCode, body: data }));
               });
               req.on("error", reject);
               req.write(payload);
               req.end();
             });
+          }
+
+          async function sendTelegram(channel, title, url) {
+            if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+              console.log("⏭️  Telegram not configured, skipping.");
+              return;
+            }
+            const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            const message = `🔴 <b>${esc(channel)} is LIVE!</b>\n\n<b>${esc(title)}</b>\n\n${url}`;
+            const result = await post(
+              `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+              { chat_id: TELEGRAM_CHAT_ID, text: message, parse_mode: "HTML" }
+            );
+            const parsed = JSON.parse(result.body);
+            if (parsed.ok) {
+              console.log(`✅ Telegram notified: ${channel} - ${title}`);
+              return true;
+            } else {
+              console.error(`❌ Telegram rejected: ${parsed.description}`);
+              return false;
+            }
+          }
+
+          async function sendDiscord(channel, title, url) {
+            if (!DISCORD_WEBHOOK_URL) {
+              console.log("⏭️  Discord not configured, skipping.");
+              return;
+            }
+            const result = await post(DISCORD_WEBHOOK_URL, {
+              embeds: [
+                {
+                  title: `🔴 ${channel} is LIVE!`,
+                  description: `**${title}**\n\n${url}`,
+                  url: url,
+                  color: 0xff0000,
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+            });
+            // Discord returns 204 No Content on success
+            if (result.status === 204 || result.status === 200) {
+              console.log(`✅ Discord notified: ${channel} - ${title}`);
+              return true;
+            } else {
+              console.error(`❌ Discord rejected (HTTP ${result.status}): ${result.body}`);
+              return false;
+            }
           }
 
           (async () => {
@@ -117,26 +171,18 @@ jobs:
                 if (isLive) {
                   const title   = video.snippet.title;
                   const channel = video.snippet.channelTitle;
-                  const url     = `https://youtube.com/watch?v=${videoId}`;
-                  const esc     = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                  const message = `🔴 <b>${esc(channel)} is LIVE!</b>\n\n<b>${esc(title)}</b>\n\n${url}`;
+                  const watchUrl = `https://youtube.com/watch?v=${videoId}`;
 
-                  console.log(`📤 Sending Telegram message for: ${channel} - ${title}`);
+                  console.log(`📤 Sending notifications for: ${channel} - ${title}`);
 
-                  const telegramResult = await post(
-                    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-                    { chat_id: TELEGRAM_CHAT_ID, text: message, parse_mode: "HTML" }
-                  );
+                  const [telegramOk, discordOk] = await Promise.all([
+                    sendTelegram(channel, title, watchUrl),
+                    sendDiscord(channel, title, watchUrl),
+                  ]);
 
-                  console.log(`📬 Telegram response: ${telegramResult}`);
-
-                  const parsed = JSON.parse(telegramResult);
-                  if (parsed.ok) {
+                  if (telegramOk || discordOk) {
                     notified[videoId] = true;
                     newNotifications++;
-                    console.log(`✅ Notified: ${channel} - ${title}`);
-                  } else {
-                    console.error(`❌ Telegram rejected message: ${parsed.description}`);
                   }
 
                 } else {
