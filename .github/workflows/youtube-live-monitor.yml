@@ -41,6 +41,7 @@ jobs:
             "UUI7dq0xYSboALge88iamUhg",  // @HeySkyfall
             "UUcKHvuE2OmgZnb2XlqKcHgw", // @CrossroadOnRblx
             "UUA8Us_qSFhhqrk7SOZQSV-Q",  // @BlueyRBLXYT
+            "UUvUJVCHCEx9h76ofD0K6m4g",
           ];
 
           const NOTIFIED_FILE = "notified.json";
