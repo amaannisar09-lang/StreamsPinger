@@ -33,16 +33,14 @@ jobs:
           const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
           const PLAYLIST_IDS = [
-            "UUBCb6Ye01QIcOQqn4jXl2cQ",
-            "UUqzW7F0gwfgPrzabIi5RCmw",
-            "UU1q8Mowrhbbx3WjuX16p8JA",
-            "UUybLkSR7bhDO1euayyonllA",
-            "UU2TXK9laU5OWK_23zizgVMg",
-            "UUIuJ3tEY0U5CRtk5GAt0Z2Q",
-            "UU21eaBpzcQdaCQVKjSjKQIw",
-            "UUuntlPezO6Ge_9C28TcK1Qg",
-            "UUdfhZEs7QeJZ0_rqZVq207g",
-            "UUliiFfkk1u60BGrt0bJ4vVA",
+            "UU8brOTuK0kcZNjiFpZOqw-g", // @gentleplaysss
+            "UUONfoWIZMz6ZQtyibRUrD8g", // @09thYT
+            "UUfpIgTOfyQVkYrmXfwIyriQ", // @Lapa41
+            "UU5dmo7JjU-Mqdg6hELICh8g", // @ArmoredReality
+            "UUrk-QGWp7eMNJSGQ5h6BORA", // @VampedRBLX
+            "UUI7dq0xYSboALge88iamUhg",  // @HeySkyfall
+            "UUcKHvuE2OmgZnb2XlqKcHgw", // @CrossroadOnRblx
+            "UUA8Us_qSFhhqrk7SOZQSV-Q",  // @BlueyRBLXYT
           ];
 
           const NOTIFIED_FILE = "notified.json";
