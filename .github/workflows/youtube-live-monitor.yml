@@ -42,6 +42,7 @@ jobs:
             "UUcKHvuE2OmgZnb2XlqKcHgw", // @CrossroadOnRblx
             "UUA8Us_qSFhhqrk7SOZQSV-Q",  // @BlueyRBLXYT
             "UUvUJVCHCEx9h76ofD0K6m4g",
+            "UU8U-y6fi8QVOMcToox7mpbA", //DanizOnTop
           ];
 
           const NOTIFIED_FILE = "notified.json";
